@@ -21,33 +21,38 @@ void amcomPacketHandler(const AMCOM_Packet* packet, void* userContext) {
 	size_t bytesToSend = 0;						// size of the outgoing packet
 	static int playerCounter;					// just a counter to distinguish player instances
 	SOCKET sock = (SOCKET)userContext;			// socket used for communication with the game client
+	
+	static AMCOM_IdentifyResponsePayload identifyResponse;
+	static AMCOM_NewGameRequestPayload newGameRequest;
+	static AMCOM_PlayerUpdateRequestPayload playerUpdateRequest;
+	static AMCOM_FoodUpdateRequestPayload foodUpdateRequest;
+	static AMCOM_MoveRequestPayload moveRequest;
+	static AMCOM_MoveResponsePayload moveResponse;
 
-	struct Position player = {0, 0};
-	struct Position destination = {5, -5};
 	switch (packet->header.type) {
 	case AMCOM_IDENTIFY_REQUEST:
 		LOG_INF("Got IDENTIFY.request. Responding with IDENTIFY.response");
-		AMCOM_IdentifyResponsePayload identifyResponse;
 		sprintf(identifyResponse.playerName, "MyName%d", playerCounter++);
 		bytesToSend = AMCOM_Serialize(AMCOM_IDENTIFY_RESPONSE, &identifyResponse, sizeof(identifyResponse), amcomBuf);
 		break;
 	case AMCOM_NEW_GAME_REQUEST:
 		LOG_INF("Got NEW_GAME.request.");
+		fillNewGameRequestPayload(packet, &newGameRequest);
 		bytesToSend = AMCOM_Serialize(AMCOM_NEW_GAME_RESPONSE, NULL, 0, amcomBuf);
 	    break;
 	case AMCOM_PLAYER_UPDATE_REQUEST:
 		LOG_INF("Got PLAYER_UPDATE.request.");
-		// TODO: use the received information
+		fillPlayerUpdateRequestPayload(packet, &playerUpdateRequest);
 	    break;
 	case AMCOM_FOOD_UPDATE_REQUEST:
 		LOG_INF("Got FOOD_UPDATE.request.");
-		// TODO: use the received information
+		fillFoodUpdateRequestPayload(packet, &foodUpdateRequest);
 		break;
 	case AMCOM_MOVE_REQUEST:
-		LOG_INF("Got MOVE.request.");
-		float angle = findAngleToGo(player, destination);
-		angle += 0.01;
-		bytesToSend = AMCOM_Serialize(AMCOM_MOVE_RESPONSE, &angle, 4, amcomBuf);
+		LOG_DBG("Got MOVE_UPDATE.request.");
+		fillMoveRequestPayload(packet, &moveRequest);
+		goForTheFirstFood(&foodUpdateRequest, &moveRequest, &moveResponse);
+		bytesToSend = AMCOM_Serialize(AMCOM_MOVE_RESPONSE, &moveResponse, sizeof(moveResponse), amcomBuf);
 		break;
 	}
 
@@ -58,7 +63,7 @@ void amcomPacketHandler(const AMCOM_Packet* packet, void* userContext) {
 			closesocket(sock);
 			return;
 		} else {
-			LOG_INF("Sent %d bytes through socket.", bytesSent);
+			//LOG_INF("Sent %d bytes through socket.", bytesSent);
 		}
 	}
 }
@@ -80,7 +85,7 @@ DWORD WINAPI playerThread( LPVOID lpParam )
 		// Fetch the bytes from socket into buf
 		receivedBytesCount = recv(sock, buf, sizeof(buf), 0);
 		if (receivedBytesCount > 0) {
-			LOG_INF("Received %d bytes in socket.", receivedBytesCount);
+			//LOG_INF("Received %d bytes in socket.", receivedBytesCount);
 			// Try to deserialize the incoming data
 			AMCOM_Deserialize(&amcomReceiver, buf, receivedBytesCount);
 		} else if (receivedBytesCount < 0) {

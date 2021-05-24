@@ -2,5 +2,5 @@ cmake_minimum_required (VERSION 3.1)
 
 project (mniam_player)
 
-add_executable(mniam_player main.c amcom.c mniam_bot.c)
+add_executable(mniam_player main.c amcom.c mniam_bot.c amcom_packets.c)
 target_link_libraries(mniam_player Ws2_32.lib)
