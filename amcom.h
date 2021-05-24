@@ -2,7 +2,7 @@
 #define AMCOM_H_
 
 /**
- * This header file defines the API for the AMCOM library that is responsible for sending and receiving AMCOM packets.
+ * This Header file defines the API for the AMCOM library that is responsible for sending and receiving AMCOM packets.
  *
  * Each AM packet consists of the following fields:
  *
@@ -31,7 +31,7 @@ extern "C" {
 #if defined __ARMCC_VERSION
 // Definitions for KEIL:
 
-/// Indicates that the structure shall be packed
+// Indicates that the structure shall be packed
 #define AMPACKED							__packed
 
 #elif defined __GNUC__

@@ -8,6 +8,8 @@
 
 #include "amcom.h"
 #include "amcom_packets.h"
+#include "logging.h"
+#include "mniam_bot.h"
 
 #define DEFAULT_TCP_PORT 	"2001"
 
@@ -20,39 +22,43 @@ void amcomPacketHandler(const AMCOM_Packet* packet, void* userContext) {
 	static int playerCounter;					// just a counter to distinguish player instances
 	SOCKET sock = (SOCKET)userContext;			// socket used for communication with the game client
 
+	struct Position player = {0, 0};
+	struct Position destination = {5, -5};
 	switch (packet->header.type) {
 	case AMCOM_IDENTIFY_REQUEST:
-		printf("Got IDENTIFY.request. Responding with IDENTIFY.response\n");
+		LOG_INF("Got IDENTIFY.request. Responding with IDENTIFY.response");
 		AMCOM_IdentifyResponsePayload identifyResponse;
 		sprintf(identifyResponse.playerName, "MyName%d", playerCounter++);
 		bytesToSend = AMCOM_Serialize(AMCOM_IDENTIFY_RESPONSE, &identifyResponse, sizeof(identifyResponse), amcomBuf);
 		break;
 	case AMCOM_NEW_GAME_REQUEST:
-		printf("Got NEW_GAME.request.\n");
-		// TODO: respond with NEW_GAME.confirmation
+		LOG_INF("Got NEW_GAME.request.");
+		bytesToSend = AMCOM_Serialize(AMCOM_NEW_GAME_RESPONSE, NULL, 0, amcomBuf);
 	    break;
 	case AMCOM_PLAYER_UPDATE_REQUEST:
-		printf("Got PLAYER_UPDATE.request.\n");
+		LOG_INF("Got PLAYER_UPDATE.request.");
 		// TODO: use the received information
 	    break;
 	case AMCOM_FOOD_UPDATE_REQUEST:
-		printf("Got FOOD_UPDATE.request.\n");
+		LOG_INF("Got FOOD_UPDATE.request.");
 		// TODO: use the received information
 		break;
 	case AMCOM_MOVE_REQUEST:
-		printf("Got MOVE.request.\n");
-		// TODO: respond with MOVE.confirmation
+		LOG_INF("Got MOVE.request.");
+		float angle = findAngleToGo(player, destination);
+		angle += 0.01;
+		bytesToSend = AMCOM_Serialize(AMCOM_MOVE_RESPONSE, &angle, 4, amcomBuf);
 		break;
 	}
 
 	if (bytesToSend > 0) {
 		int bytesSent = send(sock, (const char*)amcomBuf, bytesToSend, 0 );
 		if (bytesSent == SOCKET_ERROR) {
-			printf("Socket send failed with error: %d\n", WSAGetLastError());
+			LOG_ERR("Socket send failed with error: %d", WSAGetLastError());
 			closesocket(sock);
 			return;
 		} else {
-			printf("Sent %d bytes through socket.\n", bytesSent);
+			LOG_INF("Sent %d bytes through socket.", bytesSent);
 		}
 	}
 }
@@ -64,7 +70,7 @@ DWORD WINAPI playerThread( LPVOID lpParam )
 	char buf[512];						// buffer for temporary data
 	int receivedBytesCount;				// holds the number of bytes received via socket
 
-	printf("Got new TCP connection.\n");
+	LOG_INF("Got new TCP connection.");
 
 	// Initialize AMCOM receiver
 	AMCOM_InitReceiver(&amcomReceiver, amcomPacketHandler, (void*)sock);
@@ -74,18 +80,18 @@ DWORD WINAPI playerThread( LPVOID lpParam )
 		// Fetch the bytes from socket into buf
 		receivedBytesCount = recv(sock, buf, sizeof(buf), 0);
 		if (receivedBytesCount > 0) {
-			printf("Received %d bytes in socket.\n", receivedBytesCount);
+			LOG_INF("Received %d bytes in socket.", receivedBytesCount);
 			// Try to deserialize the incoming data
 			AMCOM_Deserialize(&amcomReceiver, buf, receivedBytesCount);
 		} else if (receivedBytesCount < 0) {
 			// Negative result indicates that there was socket communication error
-			printf("Socket recv failed with error: %d\n", WSAGetLastError());
+			LOG_ERR("Socket recv failed with error: %d", WSAGetLastError());
 			closesocket(sock);
 			break;
 		}
 	} while (receivedBytesCount > 0);
 
-	printf("Closing connection.\n");
+	LOG_INF("Closing connection.");
 
 	// shutdown the connection since we're done
 	receivedBytesCount = shutdown(sock, SD_SEND);
@@ -104,12 +110,12 @@ int main(int argc, char **argv) {
 	int result;
 
 	// Say hello
-	printf("mniAM player listening on port %s\nPress CTRL+x to quit\n", DEFAULT_TCP_PORT);
+	LOG_INF("mniAM player listening on port %s\nPress CTRL+x to quit", DEFAULT_TCP_PORT);
 
 	// Initialize Winsock
 	result = WSAStartup(MAKEWORD(2,2), &wsaData);
 	if (result != 0) {
-		printf("WSAStartup failed with error: %d\n", result);
+		LOG_ERR("WSAStartup failed with error: %d", result);
 		return -1;
 	}
 
@@ -123,7 +129,7 @@ int main(int argc, char **argv) {
 	// Resolve the server address and port
 	result = getaddrinfo(NULL, DEFAULT_TCP_PORT, &hints, &addrResult);
 	if ( result != 0 ) {
-		printf("Function 'getaddrinfo' failed with error: %d\n", result);
+		LOG_ERR("Function 'getaddrinfo' failed with error: %d", result);
 		WSACleanup();
 		return -2;
 	}
@@ -131,7 +137,7 @@ int main(int argc, char **argv) {
 	// Create a socket for connecting to server
 	listenSocket = socket(addrResult->ai_family, addrResult->ai_socktype, addrResult->ai_protocol);
 	if (listenSocket == INVALID_SOCKET) {
-		printf("Function 'socket' failed with error: %ld\n", WSAGetLastError());
+		LOG_ERR("Function 'socket' failed with error: %ld", WSAGetLastError());
 		freeaddrinfo(addrResult);
 		WSACleanup();
 		return -3;
@@ -139,7 +145,7 @@ int main(int argc, char **argv) {
 	// Setup the TCP listening socket
 	result = bind(listenSocket, addrResult->ai_addr, (int)addrResult->ai_addrlen);
 	if (result == SOCKET_ERROR) {
-		printf("Function 'bind' failed with error: %d\n", WSAGetLastError());
+		LOG_ERR("Function 'bind' failed with error: %d", WSAGetLastError());
 		freeaddrinfo(addrResult);
 		closesocket(listenSocket);
 		WSACleanup();
@@ -150,7 +156,7 @@ int main(int argc, char **argv) {
 	// Listen for connections
 	result = listen(listenSocket, SOMAXCONN);
 	if (result == SOCKET_ERROR) {
-		printf("Function 'listen' failed with error: %d\n", WSAGetLastError());
+		LOG_ERR("Function 'listen' failed with error: %d", WSAGetLastError());
 		closesocket(listenSocket);
 		WSACleanup();
 		return -5;
@@ -160,7 +166,7 @@ int main(int argc, char **argv) {
 		// Accept client socket
 		clientSocket = accept(listenSocket, NULL, NULL);
 		if (clientSocket == INVALID_SOCKET) {
-			printf("Function 'accept' failed with error: %d\n", WSAGetLastError());
+			LOG_ERR("Function 'accept' failed with error: %d", WSAGetLastError());
 			closesocket(listenSocket);
 			WSACleanup();
 			return -6;
