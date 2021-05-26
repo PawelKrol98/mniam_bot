@@ -2,8 +2,6 @@
 #define AMCOM_PACKETS_H_
 
 #include "amcom.h"
-#include "logging.h"
-#include <string.h>
 
 /// Maximum length of the player name including trailing '\0'
 #define AMCOM_MAX_PLAYER_NAME_LEN	24
@@ -56,8 +54,6 @@ typedef struct AMPACKED {
 // static assertion to check that the structure is indeed packed
 static_assert(10 == sizeof(AMCOM_NewGameRequestPayload), "10 != sizeof(AMCOM_NewGameRequestPayload)");
 
-void fillNewGameRequestPayload(const AMCOM_Packet* packet, AMCOM_NewGameRequestPayload* newGameRequest);
-
 /// Structure describing the state of a single player
 typedef struct AMPACKED {
 	/// Player number
@@ -77,12 +73,8 @@ typedef struct AMPACKED {
 	/// array of player states - the actual number of items in this array depends on the packet length
 	AMCOM_PlayerState playerState[AMCOM_MAX_PLAYER_UPDATES];
 } AMCOM_PlayerUpdateRequestPayload;
-
-void fillPlayerUpdateRequestPayload(const AMCOM_Packet* packet, AMCOM_PlayerUpdateRequestPayload* playerUpdateRequest);
-
 // static assertion to check that the structure is indeed packed
 static_assert(88 == sizeof(AMCOM_PlayerUpdateRequestPayload), "88 != sizeof(AMCOM_PlayerUpdateRequestPayload)");
-
 
 /// Structure describing the state of a single food
 typedef struct AMPACKED {
@@ -90,7 +82,7 @@ typedef struct AMPACKED {
 	uint16_t foodNo;
 	// Food state (1 = available, 0 = eaten)
 	uint8_t state;
-	///  position on map
+	/// X position on map
 	float x;
 	/// Y position on map
 	float y;
@@ -106,9 +98,6 @@ typedef struct AMPACKED {
 // static assertion to check that the structure is indeed packed
 static_assert(176 == sizeof(AMCOM_FoodUpdateRequestPayload), "176 != sizeof(AMCOM_FoodUpdateRequestPayload)");
 
-void fillFoodUpdateRequestPayload(const AMCOM_Packet* packet, AMCOM_FoodUpdateRequestPayload* foodUpdateRequest);
-
-
 /// Structure of the MOVE.request packet payload
 typedef struct AMPACKED {
 	/// current player position on map - X
@@ -119,8 +108,6 @@ typedef struct AMPACKED {
 // static assertion to check that the structure is indeed packed
 static_assert(8 == sizeof(AMCOM_MoveRequestPayload), "8 != sizeof(AMCOM_MoveRequestPayload)");
 
-void fillMoveRequestPayload(const AMCOM_Packet* packet, AMCOM_MoveRequestPayload* AMCOM_MoveRequestPayload);
-
 /// Structure of the MOVE.response packet payload
 typedef struct AMPACKED {
 	/// angle at which the player should move (in radians)
@@ -128,6 +115,5 @@ typedef struct AMPACKED {
 } AMCOM_MoveResponsePayload;
 // static assertion to check that the structure is indeed packed
 static_assert(4 == sizeof(AMCOM_MoveResponsePayload), "4 != sizeof(AMCOM_MoveResponsePayload)");
-
 
 #endif /* AMCOM_PACKETS_H_ */

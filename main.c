@@ -22,36 +22,57 @@ void amcomPacketHandler(const AMCOM_Packet* packet, void* userContext) {
 	static int playerCounter;					// just a counter to distinguish player instances
 	SOCKET sock = (SOCKET)userContext;			// socket used for communication with the game client
 	
-	static AMCOM_IdentifyResponsePayload identifyResponse;
-	static AMCOM_NewGameRequestPayload newGameRequest;
-	static AMCOM_PlayerUpdateRequestPayload playerUpdateRequest;
-	static AMCOM_FoodUpdateRequestPayload foodUpdateRequest;
-	static AMCOM_MoveRequestPayload moveRequest;
+	static GameInfo gameInfo;
+
 	static AMCOM_MoveResponsePayload moveResponse;
 
-	switch (packet->header.type) {
+	switch (packet->header.type) { 
 	case AMCOM_IDENTIFY_REQUEST:
 		LOG_INF("Got IDENTIFY.request. Responding with IDENTIFY.response");
-		sprintf(identifyResponse.playerName, "MyName%d", playerCounter++);
+		AMCOM_IdentifyResponsePayload identifyResponse;
+		sprintf(identifyResponse.playerName, "Mikipawcio");
 		bytesToSend = AMCOM_Serialize(AMCOM_IDENTIFY_RESPONSE, &identifyResponse, sizeof(identifyResponse), amcomBuf);
 		break;
 	case AMCOM_NEW_GAME_REQUEST:
 		LOG_INF("Got NEW_GAME.request.");
-		fillNewGameRequestPayload(packet, &newGameRequest);
+		AMCOM_NewGameRequestPayload newGameRequest = *(AMCOM_NewGameRequestPayload*)(void*)packet->payload;
+		LOG_INF("your player_number: %d",  newGameRequest.playerNumber);
+		LOG_INF("number of players: %d",  newGameRequest.numberOfPlayers);
+		LOG_INF("width: %f",  newGameRequest.mapWidth);
+		LOG_INF("height: %f",  newGameRequest.mapHeight);
+		newGameUpdate(&gameInfo, &newGameRequest);
 		bytesToSend = AMCOM_Serialize(AMCOM_NEW_GAME_RESPONSE, NULL, 0, amcomBuf);
 	    break;
 	case AMCOM_PLAYER_UPDATE_REQUEST:
 		LOG_INF("Got PLAYER_UPDATE.request.");
-		fillPlayerUpdateRequestPayload(packet, &playerUpdateRequest);
+		AMCOM_PlayerUpdateRequestPayload playerUpdateRequest = *(AMCOM_PlayerUpdateRequestPayload*)(void*)packet->payload;
+		const uint8_t numberOfPlayers = packet->header.length / sizeof(AMCOM_PlayerState);
+		for (int i = 0; i < numberOfPlayers; i++)
+		{
+			LOG_DBG("Player %d hp:%d x:%f y:%f", playerUpdateRequest.playerState[i].playerNo,
+												playerUpdateRequest.playerState[i].hp,
+												playerUpdateRequest.playerState[i].x,
+												playerUpdateRequest.playerState[i].y);
+		}
+		playerUpdate(&gameInfo, &playerUpdateRequest);
 	    break;
 	case AMCOM_FOOD_UPDATE_REQUEST:
 		LOG_INF("Got FOOD_UPDATE.request.");
-		fillFoodUpdateRequestPayload(packet, &foodUpdateRequest);
+		AMCOM_FoodUpdateRequestPayload foodUpdateRequest = *(AMCOM_FoodUpdateRequestPayload*)(void*)packet->payload;
+		const uint8_t numberOfFood = packet->header.length / sizeof(AMCOM_FoodState);
+		for (int i = 0; i < numberOfFood; i++)
+		{
+			LOG_DBG("Food %d state:%d x:%f y:%f", foodUpdateRequest.foodState[i].foodNo,
+												foodUpdateRequest.foodState[i].state,
+												foodUpdateRequest.foodState[i].x,
+												foodUpdateRequest.foodState[i].y);
+		}
+		foodUpdate(&gameInfo, &foodUpdateRequest);
 		break;
 	case AMCOM_MOVE_REQUEST:
 		LOG_DBG("Got MOVE_UPDATE.request.");
-		fillMoveRequestPayload(packet, &moveRequest);
-		goForTheFirstFood(&foodUpdateRequest, &moveRequest, &moveResponse);
+		AMCOM_MoveRequestPayload moveRequest = *(AMCOM_MoveRequestPayload*)(void*)packet->payload;
+		goForTheFirstFood(&foodUpdateRequest, &moveRequest, &moveResponse);								  
 		bytesToSend = AMCOM_Serialize(AMCOM_MOVE_RESPONSE, &moveResponse, sizeof(moveResponse), amcomBuf);
 		break;
 	}

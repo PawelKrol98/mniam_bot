@@ -2,7 +2,7 @@
 #define LOGGING_H_
 #include <stdio.h>
 
-#define LOG_LEVEL 3
+#define LOG_LEVEL 4
 
 #if LOG_LEVEL >= 1 
 #define LOG_ERR(...) \
