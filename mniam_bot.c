@@ -15,46 +15,70 @@ float findAngleToGo(Position player, Position destination)
     return angle;
 }
 
+float calculateDistance(Position pointA, Position pointB)
+{
+    float deltaX = pointA.x - pointB.x;
+    float deltaY = pointA.y - pointB.y;
+    float square = pow(deltaX, 2) + pow(deltaY, 2);
+    return sqrt(square);
+}
+
 void newGameUpdate(GameInfo* gameInfo, AMCOM_NewGameRequestPayload* newGameRequest)
 {
     gameInfo->alivePlayers = newGameRequest->numberOfPlayers;
     gameInfo->ourId = newGameRequest->playerNumber;
+    gameInfo->mapHeight = newGameRequest->mapHeight;
+    gameInfo->mapWidth = newGameRequest->mapWidth;
 }
 
-void playerUpdate(GameInfo* gameInfo, AMCOM_PlayerUpdateRequestPayload* playerUpdateRequest)
+void playerUpdate(GameInfo* gameInfo, AMCOM_PlayerUpdateRequestPayload* playerUpdateRequest, uint8_t packetLength)
 {
+    uint8_t playersInPacket = packetLength / 11;
+    for (int i = 0; i < playersInPacket; i++)
+    {
+        uint8_t playerId = playerUpdateRequest->playerState[i].playerNo;
+        gameInfo->players[playerId].id = playerUpdateRequest->playerState[i].playerNo;
+        gameInfo->players[playerId].hp = playerUpdateRequest->playerState[i].hp;
+        gameInfo->players[playerId].radius = fminf(200, (25 + gameInfo->players[i].hp)/2);
+        if (gameInfo->players[playerId].hp != 0)
+        {
+            gameInfo->players[playerId].position.x = playerUpdateRequest->playerState[i].x;
+            gameInfo->players[playerId].position.y = playerUpdateRequest->playerState[i].y;
+        }
+    }
     uint8_t alivePlayers = 0;
     for (int i = 0; i < AMCOM_MAX_PLAYER_UPDATES; i++)
     {
-        gameInfo->players[i].id = playerUpdateRequest->playerState[i].playerNo;
-        gameInfo->players[i].hp = playerUpdateRequest->playerState[i].hp;
-        gameInfo->players[i].radius = fminf(200, (25 + gameInfo->players[i].hp)/2);
-        if (gameInfo->players[i].hp != 0)
-        {
-            alivePlayers++;
-            gameInfo->players[i].position.x = playerUpdateRequest->playerState[i].x;
-            gameInfo->players[i].position.y = playerUpdateRequest->playerState[i].y;
-        }
+        if (gameInfo->players[i].hp != 0) alivePlayers++;
     }
     gameInfo->alivePlayers = alivePlayers;
 }
 
-void foodUpdate(GameInfo* gameInfo, AMCOM_FoodUpdateRequestPayload* foodUpdateRequest)
+void foodUpdate(GameInfo* gameInfo, AMCOM_FoodUpdateRequestPayload* foodUpdateRequest, uint8_t packetLength)
 {
+    uint8_t foodInPacket = packetLength / 11;
+    LOG_INF("Food in packet %d", foodInPacket);
+    for (int i = 0; i < foodInPacket; i++)
+    {
+        uint8_t foodId = foodUpdateRequest->foodState[i].foodNo;
+        LOG_INF("Food id: %d", foodId);
+        gameInfo->food[foodId].id = foodUpdateRequest->foodState[i].foodNo;
+        gameInfo->food[foodId].state = foodUpdateRequest->foodState[i].state;
+        if (gameInfo->food[foodId].state)
+        {
+            gameInfo->food[foodId].radius = 12.5;
+            gameInfo->food[foodId].position.x = foodUpdateRequest->foodState[i].x;
+            gameInfo->food[foodId].position.y = foodUpdateRequest->foodState[i].y;
+            LOG_INF("Food x: %f, food y: %f, food state %d", gameInfo->food[i].position.x, gameInfo->food[i].position.y, gameInfo->food[i].state);
+        }
+    }
     uint8_t foodLeft = 0;
     for (int i = 0; i < AMCOM_MAX_FOOD_UPDATES; i++)
     {
-        gameInfo->food[i].id = foodUpdateRequest->foodState[i].foodNo;
-        gameInfo->food[i].state = foodUpdateRequest->foodState[i].state;
-        if (gameInfo->food[i].state)
-        {
-            foodLeft++;
-            gameInfo->food[i].radius = 12.5;
-            gameInfo->food[i].position.x = foodUpdateRequest->foodState[i].x;
-            gameInfo->food[i].position.y = foodUpdateRequest->foodState[i].y;
-        }
+        if (gameInfo->food[i].state) foodLeft++;
     }
     gameInfo->foodLeft = foodLeft;
+    LOG_INF("Food left: %d", gameInfo->foodLeft);
 }
 
 void ourPositionUpdate(GameInfo* gameInfo, AMCOM_MoveRequestPayload* moveRequest)
@@ -65,16 +89,33 @@ void ourPositionUpdate(GameInfo* gameInfo, AMCOM_MoveRequestPayload* moveRequest
 										gameInfo->ourPosition.y);
 }
 
-void goForTheFirstFood(const AMCOM_FoodUpdateRequestPayload* foodUpdateRequest, const AMCOM_MoveRequestPayload* moveRequest, AMCOM_MoveResponsePayload* moveResponse)
+Position findClosestFood(GameInfo gameInfo)
 {
-    for (int i = 0; i < AMCOM_MAX_FOOD_UPDATES; i ++)
+    float closestDistance = sqrt(pow(gameInfo.mapHeight, 2) + pow(gameInfo.mapWidth, 2));
+    Position closestFood;
+    for (int i = 0; i < AMCOM_MAX_FOOD_UPDATES; i++)
     {
-        if (foodUpdateRequest->foodState[i].state != 0)
+        if (gameInfo.food[i].state)
         {
-            struct Position player = {moveRequest->x, moveRequest->y};
-            struct Position destination = {foodUpdateRequest->foodState[i].x, foodUpdateRequest->foodState[i].y};
-            moveResponse->angle = findAngleToGo(player, destination);
-            return;
+            if (calculateDistance(gameInfo.ourPosition, gameInfo.food[i].position) < closestDistance)
+            {
+                closestDistance = calculateDistance(gameInfo.ourPosition, gameInfo.food[i].position);
+                closestFood = gameInfo.food[i].position;
+            }
         }
+    }
+    return closestFood;
+}
+
+float makeDecision(GameInfo gameInfo)
+{
+    if (gameInfo.foodLeft > 0)
+    {
+        Position closestFood = findClosestFood(gameInfo);
+        return findAngleToGo(gameInfo.ourPosition, closestFood);
+    }
+    else
+    {
+        return 0;
     }
 }

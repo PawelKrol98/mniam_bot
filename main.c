@@ -54,25 +54,25 @@ void amcomPacketHandler(const AMCOM_Packet* packet, void* userContext) {
 												playerUpdateRequest.playerState[i].x,
 												playerUpdateRequest.playerState[i].y);
 		}
-		playerUpdate(&gameInfo, &playerUpdateRequest);
+		playerUpdate(&gameInfo, &playerUpdateRequest, packet->header.length);
 	    break;
 	case AMCOM_FOOD_UPDATE_REQUEST:
 		LOG_INF("Got FOOD_UPDATE.request.");
 		AMCOM_FoodUpdateRequestPayload foodUpdateRequest = *(AMCOM_FoodUpdateRequestPayload*)(void*)packet->payload;
-		const uint8_t numberOfFood = packet->header.length / sizeof(AMCOM_FoodState);
-		for (int i = 0; i < numberOfFood; i++)
+		foodUpdate(&gameInfo, &foodUpdateRequest, packet->header.length);
+		for (int i = 0; i < AMCOM_MAX_FOOD_UPDATES; i++)
 		{
-			LOG_DBG("Food %d state:%d x:%f y:%f", foodUpdateRequest.foodState[i].foodNo,
-												foodUpdateRequest.foodState[i].state,
-												foodUpdateRequest.foodState[i].x,
-												foodUpdateRequest.foodState[i].y);
+			LOG_DBG("Food %d state:%d x:%f y:%f", gameInfo.food[i].id,
+												gameInfo.food[i].state,
+												gameInfo.food[i].position.x,
+												gameInfo.food[i].position.y);
 		}
-		foodUpdate(&gameInfo, &foodUpdateRequest);
 		break;
 	case AMCOM_MOVE_REQUEST:
 		LOG_DBG("Got MOVE_UPDATE.request.");
-		AMCOM_MoveRequestPayload moveRequest = *(AMCOM_MoveRequestPayload*)(void*)packet->payload;
-		goForTheFirstFood(&foodUpdateRequest, &moveRequest, &moveResponse);								  
+		AMCOM_MoveRequestPayload moveRequest = *(AMCOM_MoveRequestPayload*)(void*)packet->payload;	
+		ourPositionUpdate(&gameInfo, &moveRequest);
+		moveResponse.angle = makeDecision(gameInfo);
 		bytesToSend = AMCOM_Serialize(AMCOM_MOVE_RESPONSE, &moveResponse, sizeof(moveResponse), amcomBuf);
 		break;
 	}

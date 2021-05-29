@@ -27,6 +27,8 @@ typedef struct FoodInfo
 
 typedef struct GameInfo
 {
+    float mapHeight;
+    float mapWidth;
     uint8_t ourId;
     Position ourPosition;
     PlayerInfo players[AMCOM_MAX_PLAYER_UPDATES];
@@ -35,11 +37,13 @@ typedef struct GameInfo
     uint8_t foodLeft;
 } GameInfo;
 
+float findAngleToGo(Position, Position);
+float calculateDistance(Position, Position);
 void newGameUpdate(GameInfo*, AMCOM_NewGameRequestPayload*);
-void playerUpdate(GameInfo*, AMCOM_PlayerUpdateRequestPayload*);
-void foodUpdate(GameInfo*, AMCOM_FoodUpdateRequestPayload*);
+void playerUpdate(GameInfo*, AMCOM_PlayerUpdateRequestPayload*, uint8_t);
+void foodUpdate(GameInfo*, AMCOM_FoodUpdateRequestPayload*, uint8_t);
 void ourPositionUpdate(GameInfo*, AMCOM_MoveRequestPayload*);
-float findAngleToGo(Position player, Position destination);
-void goForTheFirstFood(const AMCOM_FoodUpdateRequestPayload*,const AMCOM_MoveRequestPayload*, AMCOM_MoveResponsePayload*);
+Position findClosestFood(GameInfo);
+float makeDecision(GameInfo);
 
 #endif
