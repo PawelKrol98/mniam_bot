@@ -89,10 +89,11 @@ void ourPositionUpdate(GameInfo* gameInfo, AMCOM_MoveRequestPayload* moveRequest
 										gameInfo->ourPosition.y);
 }
 
-Position findClosestFood(GameInfo gameInfo)
+uint16_t findClosestFood(GameInfo gameInfo)
 {
     float closestDistance = sqrt(pow(gameInfo.mapHeight, 2) + pow(gameInfo.mapWidth, 2));
     Position closestFood;
+    uint16_t closestFoodId;
     for (int i = 0; i < AMCOM_MAX_FOOD_UPDATES; i++)
     {
         if (gameInfo.food[i].state)
@@ -101,21 +102,106 @@ Position findClosestFood(GameInfo gameInfo)
             {
                 closestDistance = calculateDistance(gameInfo.ourPosition, gameInfo.food[i].position);
                 closestFood = gameInfo.food[i].position;
+                closestFoodId = gameInfo.food[i].id;
             }
         }
     }
-    return closestFood;
+    return closestFoodId;
+}
+
+uint8_t findClosestWorsePlayer(GameInfo gameInfo) {
+    
+    Position closestEnemy;
+    PlayerInfo player = gameInfo.players[gameInfo.ourId];  
+    uint8_t closestEnemyId;
+    float closestDistance = sqrt(pow(gameInfo.mapHeight, 2) + pow(gameInfo.mapWidth, 2));
+    
+    for (int i = 0; i < AMCOM_MAX_PLAYER_UPDATES; i++)
+    {
+        if (player.hp > gameInfo.players[i].hp && gameInfo.players[i].id != gameInfo.ourId)
+        {
+            if (calculateDistance(gameInfo.ourPosition, gameInfo.players[i].position) < closestDistance)
+            {
+                closestDistance = calculateDistance(gameInfo.ourPosition, gameInfo.players[i].position);
+                closestEnemy = gameInfo.players[i].position;
+                closestEnemyId = gameInfo.players[i].id;
+            }
+        }
+    }
+    return closestEnemyId;
+}
+
+uint8_t findClosestPowerfulPlayer(GameInfo gameInfo) {
+    
+    Position closestEnemy;
+    PlayerInfo player = gameInfo.players[gameInfo.ourId];  
+    uint8_t closestEnemyId;
+    float closestDistance = sqrt(pow(gameInfo.mapHeight, 2) + pow(gameInfo.mapWidth, 2));
+    
+    for (int i = 0; i < AMCOM_MAX_PLAYER_UPDATES; i++)
+    {
+        if (player.hp <= gameInfo.players[i].hp && gameInfo.players[i].id != gameInfo.ourId)
+        {
+            if (calculateDistance(gameInfo.ourPosition, gameInfo.players[i].position) < closestDistance)
+            {
+                closestDistance = calculateDistance(gameInfo.ourPosition, gameInfo.players[i].position);
+                closestEnemy = gameInfo.players[i].position;
+                closestEnemyId = gameInfo.players[i].id;
+            }
+        }
+    }
+    return closestEnemyId;
+}
+
+uint8_t findClosestPlayerToFood(GameInfo gameInfo, uint16_t foodId) {
+    
+    Position closestPlayerToFood;
+    uint8_t closestPlayerId;
+    float closestDistance = sqrt(pow(gameInfo.mapHeight, 2) + pow(gameInfo.mapWidth, 2));
+    
+    for (int i = 0; i < AMCOM_MAX_PLAYER_UPDATES; i++)
+    {
+        if(gameInfo.players[i].hp > 0 && gameInfo.players[i].id != gameInfo.ourId) {
+            if (calculateDistance(gameInfo.food[foodId].position, gameInfo.players[i].position) < closestDistance)
+            {
+                closestDistance = calculateDistance(gameInfo.food[foodId].position, gameInfo.players[i].position);
+                closestPlayerToFood = gameInfo.players[i].position;
+                closestPlayerId = gameInfo.players[i].id;
+            }
+        }
+    }
+    return closestPlayerId;
 }
 
 float makeDecision(GameInfo gameInfo)
 {
-    if (gameInfo.foodLeft > 0)
-    {
-        Position closestFood = findClosestFood(gameInfo);
-        return findAngleToGo(gameInfo.ourPosition, closestFood);
-    }
-    else
-    {
+    uint16_t closestFoodToEat; 
+    uint8_t closestPlayerToEat;
+
+    if (gameInfo.foodLeft > 0) { closestFoodToEat = findClosestFood(gameInfo); }
+    //if (gameInfo.alivePlayers > 1) { closestPlayerToEat = findClosestWorstPlayer(gameInfo); }
+
+    // czy przeciwnik nie jest blisko jedzenia
+    // jedzenie + najbliższy przeciwnik
+
+    float distanceToFood = calculateDistance(gameInfo.ourPosition, gameInfo.food[closestFoodToEat].position);
+    //float distanceToPlayer = calculateDistance(gameInfo.ourPosition, gameInfo.players[closestPlayerToEat].position); 
+
+    if (gameInfo.foodLeft > 0) {
+        return findAngleToGo(gameInfo.ourPosition, gameInfo.food[closestFoodToEat].position);
+    } else {
         return 0;
     }
+
+    /*
+    if (distanceToFood <= distanceToPlayer)
+    {
+        return findAngleToGo(gameInfo.ourPosition, gameInfo.food[closestFoodToEat].position);
+    } else if (distanceToFood > distanceToPlayer) {
+        return findAngleToGo(gameInfo.ourPosition, gameInfo.players[closestPlayerToEat].position);
+    } else {
+        return 0;
+    }
+    */
+   
 }

@@ -21,7 +21,7 @@ void amcomPacketHandler(const AMCOM_Packet* packet, void* userContext) {
 	size_t bytesToSend = 0;						// size of the outgoing packet
 	static int playerCounter;					// just a counter to distinguish player instances
 	SOCKET sock = (SOCKET)userContext;			// socket used for communication with the game client
-	
+	//char names[5] = {'a', 'b', 'c', 'd', 'e'};
 	static GameInfo gameInfo;
 
 	static AMCOM_MoveResponsePayload moveResponse;
@@ -31,6 +31,7 @@ void amcomPacketHandler(const AMCOM_Packet* packet, void* userContext) {
 		LOG_INF("Got IDENTIFY.request. Responding with IDENTIFY.response");
 		AMCOM_IdentifyResponsePayload identifyResponse;
 		sprintf(identifyResponse.playerName, "PoteznyMikiPawcio");
+		//sprintf(identifyResponse.playerName, names[playerCounter]);
 		bytesToSend = AMCOM_Serialize(AMCOM_IDENTIFY_RESPONSE, &identifyResponse, sizeof(identifyResponse), amcomBuf);
 		break;
 	case AMCOM_NEW_GAME_REQUEST:
