@@ -30,7 +30,7 @@ void amcomPacketHandler(const AMCOM_Packet* packet, void* userContext) {
 	case AMCOM_IDENTIFY_REQUEST:
 		LOG_INF("Got IDENTIFY.request. Responding with IDENTIFY.response");
 		AMCOM_IdentifyResponsePayload identifyResponse;
-		sprintf(identifyResponse.playerName, "Mikipawcio");
+		sprintf(identifyResponse.playerName, "PoteznyMikiPawcio");
 		bytesToSend = AMCOM_Serialize(AMCOM_IDENTIFY_RESPONSE, &identifyResponse, sizeof(identifyResponse), amcomBuf);
 		break;
 	case AMCOM_NEW_GAME_REQUEST:
