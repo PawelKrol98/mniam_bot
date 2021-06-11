@@ -43,10 +43,10 @@ void newGameUpdate(GameInfo*, AMCOM_NewGameRequestPayload*);
 void playerUpdate(GameInfo*, AMCOM_PlayerUpdateRequestPayload*, uint8_t);
 void foodUpdate(GameInfo*, AMCOM_FoodUpdateRequestPayload*, uint8_t);
 void ourPositionUpdate(GameInfo*, AMCOM_MoveRequestPayload*);
-uint16_t findClosestFood(GameInfo);
-uint8_t findClosestWorsePlayer(GameInfo);
-uint8_t findClosestPowerfulPlayer(GameInfo);
-uint8_t findClosestPlayerToFood(GameInfo gameInfo, uint16_t closestFoodId);
-float makeDecision(GameInfo);
+uint16_t findClosestFood(const GameInfo*);
+uint8_t findClosestWorsePlayer(const GameInfo*);
+uint8_t findClosestPowerfulPlayer(const GameInfo*);
+uint8_t findClosestPlayerToFood(const GameInfo* gameInfo, uint16_t closestFoodId);
+float makeDecision(const GameInfo*);
 
 #endif

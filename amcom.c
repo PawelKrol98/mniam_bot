@@ -19,6 +19,14 @@ static uint16_t AMCOM_UpdateCRC(uint8_t byte, uint16_t crc)
 void AMCOM_InitReceiver(AMCOM_Receiver* receiver, AMCOM_PacketHandler packetHandlerCallback, void* userContext) {
 	receiver->packetHandler = packetHandlerCallback;
 	receiver->userContext = userContext;
+
+	receiver->payloadCounter = 0;
+	receiver->receivedPacketState = AMCOM_PACKET_STATE_EMPTY;
+	
+	receiver->receivedPacket.header.sop = 0;
+	receiver->receivedPacket.header.type = 0;
+	receiver->receivedPacket.header.length = 0;
+	receiver->receivedPacket.header.crc = AMCOM_INITIAL_CRC;
 }
 
 size_t AMCOM_Serialize(uint8_t packetType, const void* payload, size_t payloadSize, uint8_t* destinationBuffer) {
