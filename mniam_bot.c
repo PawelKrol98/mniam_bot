@@ -1,6 +1,5 @@
 #include "mniam_bot.h"
 #include <math.h>
-#include "logging.h"
 
 #define PI 3.14159265359
 
@@ -9,9 +8,9 @@ float findAngleToGo(Position player, Position destination)
     float deltaX = destination.x - player.x;
     float deltaY = destination.y - player.y;
     float angle= atan2(deltaY, deltaX);
-    LOG_DBG("player x:%f y:%f", player.x, player.y);
-    LOG_DBG("destination x:%f y:%f", destination.x, destination.y);
-    LOG_DBG("Angle :%f", angle);
+    //printf("player x:%f y:%f\n", player.x, player.y);
+    //printf("destination x:%f y:%f\n", destination.x, destination.y);
+    //printf("Angle :%f\n", angle);
     return angle;
 }
 
@@ -57,11 +56,11 @@ void playerUpdate(GameInfo* gameInfo, AMCOM_PlayerUpdateRequestPayload* playerUp
 void foodUpdate(GameInfo* gameInfo, AMCOM_FoodUpdateRequestPayload* foodUpdateRequest, uint8_t packetLength)
 {
     uint8_t foodInPacket = packetLength / 11;
-    LOG_INF("Food in packet %d", foodInPacket);
+    //printf("Food in packet %d\n", foodInPacket);
     for (int i = 0; i < foodInPacket; i++)
     {
         uint8_t foodId = foodUpdateRequest->foodState[i].foodNo;
-        LOG_INF("Food id: %d", foodId);
+        //printf("Food id: %d\n", foodId);
         gameInfo->food[foodId].id = foodUpdateRequest->foodState[i].foodNo;
         gameInfo->food[foodId].state = foodUpdateRequest->foodState[i].state;
         if (gameInfo->food[foodId].state)
@@ -69,7 +68,7 @@ void foodUpdate(GameInfo* gameInfo, AMCOM_FoodUpdateRequestPayload* foodUpdateRe
             gameInfo->food[foodId].radius = 12.5;
             gameInfo->food[foodId].position.x = foodUpdateRequest->foodState[i].x;
             gameInfo->food[foodId].position.y = foodUpdateRequest->foodState[i].y;
-            LOG_INF("Food x: %f, food y: %f, food state %d", gameInfo->food[i].position.x, gameInfo->food[i].position.y, gameInfo->food[i].state);
+            //printf("Food x: %f, food y: %f, food state %d\n", gameInfo->food[i].position.x, gameInfo->food[i].position.y, gameInfo->food[i].state);
         }
     }
     uint8_t foodLeft = 0;
@@ -78,15 +77,15 @@ void foodUpdate(GameInfo* gameInfo, AMCOM_FoodUpdateRequestPayload* foodUpdateRe
         if (gameInfo->food[i].state) foodLeft++;
     }
     gameInfo->foodLeft = foodLeft;
-    LOG_INF("Food left: %d", gameInfo->foodLeft);
+    //printf("Food left: %d\n", gameInfo->foodLeft);
 }
 
 void ourPositionUpdate(GameInfo* gameInfo, AMCOM_MoveRequestPayload* moveRequest)
 {
     gameInfo->ourPosition.x = moveRequest->x;
     gameInfo->ourPosition.y = moveRequest->y;
-    LOG_DBG("current position x:%f y:%f", gameInfo->ourPosition.x,
-										gameInfo->ourPosition.y);
+    //printf("current position x:%f y:%f\n", gameInfo->ourPosition.x,
+										//gameInfo->ourPosition.y);
 }
 
 uint16_t findClosestFood(const GameInfo* gameInfo)
@@ -118,7 +117,7 @@ uint8_t findClosestWorsePlayer(const GameInfo* gameInfo) {
     
     for (int i = 0; i < AMCOM_MAX_PLAYER_UPDATES; i++)
     {
-        if (player.hp > gameInfo->players[i].hp && gameInfo->players[i].id != gameInfo->ourId)
+        if (player.hp > gameInfo->players[i].hp && gameInfo->players[i].id != gameInfo->ourId && gameInfo->players[i].hp > 0)
         {
             if (calculateDistance(gameInfo->ourPosition, gameInfo->players[i].position) < closestDistance)
             {
@@ -177,31 +176,36 @@ float makeDecision(const GameInfo* gameInfo)
 {
     uint16_t closestFoodToEat; 
     uint8_t closestPlayerToEat;
+    float distanceToFood;
+    float distanceToPlayer;
 
-    if (gameInfo->foodLeft > 0) { closestFoodToEat = findClosestFood(gameInfo); }
-    //if (gameInfo.alivePlayers > 1) { closestPlayerToEat = findClosestWorstPlayer(gameInfo); }
+    if (gameInfo->foodLeft > 0 && gameInfo->alivePlayers > 1) 
+    { 
+        closestFoodToEat = findClosestFood(gameInfo);
+        closestPlayerToEat = findClosestWorsePlayer(gameInfo); 
+        distanceToFood = calculateDistance(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
+        distanceToPlayer = calculateDistance(gameInfo->ourPosition, gameInfo->players[closestPlayerToEat].position); 
+        if (distanceToFood <= distanceToPlayer)
+        {
+            return findAngleToGo(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
+        } else if (distanceToFood > distanceToPlayer)
+        {
+            return findAngleToGo(gameInfo->ourPosition, gameInfo->players[closestPlayerToEat].position);
+        }
+    }
+    else if (gameInfo->foodLeft > 0)
+    {
+        closestFoodToEat = findClosestFood(gameInfo);
+        distanceToFood = calculateDistance(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
+        return findAngleToGo(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
+    }
+    else
+    {
+        return 0;
+    }
 
     // czy przeciwnik nie jest blisko jedzenia
     // jedzenie + najbliższy przeciwnik
-
-    float distanceToFood = calculateDistance(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
-    //float distanceToPlayer = calculateDistance(gameInfo.ourPosition, gameInfo.players[closestPlayerToEat].position); 
-
-    if (gameInfo->foodLeft > 0) {
-        return findAngleToGo(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
-    } else {
-        return 0;
-    }
-
-    /*
-    if (distanceToFood <= distanceToPlayer)
-    {
-        return findAngleToGo(gameInfo.ourPosition, gameInfo.food[closestFoodToEat].position);
-    } else if (distanceToFood > distanceToPlayer) {
-        return findAngleToGo(gameInfo.ourPosition, gameInfo.players[closestPlayerToEat].position);
-    } else {
-        return 0;
-    }
-    */
+    
    
 }

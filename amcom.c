@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "amcom.h"
-#include "logging.h"
 
 // Start of packet character
 const uint8_t  AMCOM_SOP         = 0xA1;
@@ -30,7 +29,6 @@ void AMCOM_InitReceiver(AMCOM_Receiver* receiver, AMCOM_PacketHandler packetHand
 }
 
 size_t AMCOM_Serialize(uint8_t packetType, const void* payload, size_t payloadSize, uint8_t* destinationBuffer) {
-	LOG_DBG2("started serializing data");
 	size_t serializedDataSize = 0;
 	*destinationBuffer = AMCOM_SOP;
 	*(destinationBuffer + 1) = packetType;
@@ -43,24 +41,15 @@ size_t AMCOM_Serialize(uint8_t packetType, const void* payload, size_t payloadSi
 	{
 	    if (!(destinationBuffer + serializedDataSize)) break;
 	    *(destinationBuffer + serializedDataSize) = *(uint8_t*)(payload + i);
-		LOG_DBG2("byte:%d [%d], ",i,  *(destinationBuffer + serializedDataSize));
 	    crc = AMCOM_UpdateCRC(*(uint8_t*)(payload+i), crc);
 	    serializedDataSize++;
 	}
 	*(destinationBuffer + 3) = crc;
 	*(destinationBuffer + 4) = crc>>8;
-	LOG_DBG2("serialized sop : %x, type : %d, size : %d, crc1 : %x, crc2 : %x", *(destinationBuffer),
-																			*(destinationBuffer + 1),
-																			*(destinationBuffer + 2),
-																			*(destinationBuffer + 3),
-																			*(destinationBuffer + 4));
 	return serializedDataSize;
 }
 
 void AMCOM_Deserialize(AMCOM_Receiver* receiver, const void* data, size_t dataSize) {
-	LOG_DBG2("started deserializing packet with dataSize : %d", dataSize);
-	static uint16_t expectedCrc = 0xFFFF;
-	static uint8_t payloadCounter= 0;
 	size_t bytesReceived = 0;
 	if (receiver->receivedPacketState < AMCOM_PACKET_STATE_GOT_SOP)
 	{
@@ -71,16 +60,13 @@ void AMCOM_Deserialize(AMCOM_Receiver* receiver, const void* data, size_t dataSi
 			return;
 		}
 		receiver->receivedPacketState = AMCOM_PACKET_STATE_GOT_SOP;
-		LOG_DBG2("got sop");
 		if(bytesReceived>=dataSize) return;
 	}
 	if (receiver->receivedPacketState < AMCOM_PACKET_STATE_GOT_TYPE)
 	{
 		receiver->receivedPacket.header.type = *(uint8_t*)(data+bytesReceived);
-		expectedCrc = AMCOM_UpdateCRC(*(uint8_t*)(data+bytesReceived), expectedCrc);
 		bytesReceived++;
 		receiver->receivedPacketState = AMCOM_PACKET_STATE_GOT_TYPE;
-		LOG_DBG2("got packet type : %d", receiver->receivedPacket.header.type);
 		if(bytesReceived>=dataSize) return;
 	}
 	if (receiver->receivedPacketState < AMCOM_PACKET_STATE_GOT_LENGTH)
@@ -89,16 +75,12 @@ void AMCOM_Deserialize(AMCOM_Receiver* receiver, const void* data, size_t dataSi
 		bytesReceived++;
 		if(receiver->receivedPacket.header.length > 200){
 			receiver->receivedPacketState = AMCOM_PACKET_STATE_EMPTY;
-			expectedCrc = AMCOM_INITIAL_CRC;
-			LOG_WRN("packet length is too big");
 			return;
 		}
-		expectedCrc = AMCOM_UpdateCRC(receiver->receivedPacket.header.length, expectedCrc);
 		receiver->receivedPacket.header.crc = *(uint8_t*)(data+bytesReceived);
 		bytesReceived++;
 		receiver->receivedPacket.header.crc += *(uint8_t*)(data+bytesReceived) <<8;
 		bytesReceived++;
-		LOG_DBG2("got packet length : %d", receiver->receivedPacket.header.length);
 		receiver->receivedPacketState = AMCOM_PACKET_STATE_GOT_LENGTH;
 	}
 	if (receiver->receivedPacketState < AMCOM_PACKET_STATE_GOT_WHOLE_PACKET)
@@ -110,25 +92,35 @@ void AMCOM_Deserialize(AMCOM_Receiver* receiver, const void* data, size_t dataSi
 			for (int i = 0; i < dataSize - bytesReceivedBeforePayload; i++)
 			{
 				if (!(uint8_t*)(data + bytesReceived)) break;
-				receiver->receivedPacket.payload[payloadCounter] = *(uint8_t*)(data + bytesReceived);
-				expectedCrc = AMCOM_UpdateCRC(receiver->receivedPacket.payload[payloadCounter], expectedCrc);
-				payloadCounter++;
+				receiver->receivedPacket.payload[receiver->payloadCounter] = *(uint8_t*)(data + bytesReceived);
+				receiver->payloadCounter++;
 				bytesReceived++;
-				LOG_DBG2("byte:%d [%d]",i , receiver->receivedPacket.payload[payloadCounter]);
-				if (payloadCounter == receiver->receivedPacket.header.length)
+				if (receiver->payloadCounter == receiver->receivedPacket.header.length)
 				{
 					receiver->receivedPacketState = AMCOM_PACKET_STATE_GOT_WHOLE_PACKET;
-					LOG_DBG2("got whole packet");
-					payloadCounter = 0;
+					receiver->payloadCounter = 0;
 					break;
 				}
 			}
 		}
 	}
-	if(expectedCrc == receiver->receivedPacket.header.crc)
+	if(receiver->receivedPacketState == AMCOM_PACKET_STATE_GOT_WHOLE_PACKET)
 	{
-		receiver->packetHandler(&(receiver->receivedPacket), receiver->userContext);
-		receiver->receivedPacketState = AMCOM_PACKET_STATE_EMPTY;
-		expectedCrc = AMCOM_INITIAL_CRC;
+		uint16_t expectedCrc = AMCOM_INITIAL_CRC;
+		expectedCrc = AMCOM_UpdateCRC(receiver->receivedPacket.header.type, expectedCrc);
+		expectedCrc = AMCOM_UpdateCRC(receiver->receivedPacket.header.length, expectedCrc);
+		for(int i = 0; i < receiver->receivedPacket.header.length ; i++ )
+		{
+			expectedCrc = AMCOM_UpdateCRC(receiver->receivedPacket.payload[i], expectedCrc);
+		}
+		if(expectedCrc == receiver->receivedPacket.header.crc)
+		{
+			receiver->packetHandler(&(receiver->receivedPacket), receiver->userContext);
+			receiver->receivedPacketState = AMCOM_PACKET_STATE_EMPTY;
+		}	
+		else
+		{
+			receiver->receivedPacketState = AMCOM_PACKET_STATE_EMPTY;
+		}
 	}
 }

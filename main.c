@@ -8,7 +8,6 @@
 
 #include "amcom.h"
 #include "amcom_packets.h"
-#include "logging.h"
 #include "mniam_bot.h"
 
 #define DEFAULT_TCP_PORT "2001"
@@ -38,47 +37,58 @@ void amcomPacketHandler(const AMCOM_Packet *packet, void *userContext) {
 
   switch (packet->header.type) {
   case AMCOM_IDENTIFY_REQUEST:
-    LOG_INF("Got IDENTIFY.request. Responding with IDENTIFY.response");
+  {
+    //printf("Got IDENTIFY.request. Responding with IDENTIFY.response\n");
     AMCOM_IdentifyResponsePayload identifyResponse;
     // sprintf(identifyResponse.playerName, "Potezny_uC");
     sprintf(identifyResponse.playerName, names[playerCounter++]);
     bytesToSend = AMCOM_Serialize(AMCOM_IDENTIFY_RESPONSE, &identifyResponse,
                                   sizeof(identifyResponse), amcomBuf);
     break;
+  }
   case AMCOM_NEW_GAME_REQUEST:
-    LOG_INF("Got NEW_GAME.request.");
+  {
+    //printf("Got NEW_GAME.request.\n");
     AMCOM_NewGameRequestPayload newGameRequest =
         *(AMCOM_NewGameRequestPayload *)(void *)packet->payload;
-    LOG_INF("your player_number: %d", newGameRequest.playerNumber);
-    LOG_INF("number of players: %d", newGameRequest.numberOfPlayers);
-    LOG_INF("width: %f", newGameRequest.mapWidth);
-    LOG_INF("height: %f", newGameRequest.mapHeight);
+    //printf("your player_number: %d\n", newGameRequest.playerNumber);
+    //printf("number of players: %d\n", newGameRequest.numberOfPlayers);
+    //printf("width: %f\n", newGameRequest.mapWidth);
+    //printfF("height: %f\n", newGameRequest.mapHeight);
     newGameUpdate(gameInfo, &newGameRequest);
     bytesToSend = AMCOM_Serialize(AMCOM_NEW_GAME_RESPONSE, NULL, 0, amcomBuf);
     break;
+  }
   case AMCOM_PLAYER_UPDATE_REQUEST:
-    LOG_INF("Got PLAYER_UPDATE.request.");
+  {
+    //printf("Got PLAYER_UPDATE.request.\n");
     AMCOM_PlayerUpdateRequestPayload playerUpdateRequest =
         *(AMCOM_PlayerUpdateRequestPayload *)(void *)packet->payload;
     const uint8_t numberOfPlayers =
         packet->header.length / sizeof(AMCOM_PlayerState);
+	/*
     for (int i = 0; i < numberOfPlayers; i++) {
-      LOG_DBG("Player %d hp:%d x:%f y:%f",
+      printf("Player %d hp:%d x:%f y:%f\n",
               playerUpdateRequest.playerState[i].playerNo,
               playerUpdateRequest.playerState[i].hp,
               playerUpdateRequest.playerState[i].x,
               playerUpdateRequest.playerState[i].y);
     }
+	*/
     playerUpdate(gameInfo, &playerUpdateRequest, packet->header.length);
     break;
+  }
   case AMCOM_FOOD_UPDATE_REQUEST:
-    LOG_INF("Got FOOD_UPDATE.request.");
+  {
+    //printf("Got FOOD_UPDATE.request.\n");
     AMCOM_FoodUpdateRequestPayload foodUpdateRequest =
         *(AMCOM_FoodUpdateRequestPayload *)(void *)packet->payload;
     foodUpdate(gameInfo, &foodUpdateRequest, packet->header.length);
     break;
+  }
   case AMCOM_MOVE_REQUEST:
-    LOG_DBG("Got MOVE_UPDATE.request.");
+  {
+    //printf("Got MOVE_UPDATE.request.\n");
     AMCOM_MoveRequestPayload moveRequest =
         *(AMCOM_MoveRequestPayload *)(void *)packet->payload;
     ourPositionUpdate(gameInfo, &moveRequest);
@@ -86,6 +96,7 @@ void amcomPacketHandler(const AMCOM_Packet *packet, void *userContext) {
     bytesToSend = AMCOM_Serialize(AMCOM_MOVE_RESPONSE, moveResponse,
                                   sizeof(moveResponse), amcomBuf);
     break;
+  }
   }
 
   if (bytesToSend > 0) {
@@ -95,7 +106,7 @@ void amcomPacketHandler(const AMCOM_Packet *packet, void *userContext) {
       closesocket(sock);
       return;
     } else {
-      // LOG_INF("Sent %d bytes through socket.", bytesSent);
+      //printf("Sent %d bytes through socket.\n", bytesSent);
     }
   }
 }
@@ -107,8 +118,8 @@ DWORD WINAPI playerThread(LPVOID lpParam) {
   int receivedBytesCount; // holds the number of bytes received via socket
   Dane *userData = (Dane *)lpParam;
   SOCKET sock = userData->sock;
-printf("addr2 %p\n", sock);
-  LOG_INF("Got new TCP connection.");
+  printf("addr2 %p\n", sock);
+  printf("Got new TCP connection.\n");
 
   // Initialize AMCOM receiver
   AMCOM_InitReceiver(&amcomReceiver, amcomPacketHandler, (void *)userData);
@@ -118,18 +129,18 @@ printf("addr2 %p\n", sock);
     // Fetch the bytes from socket into buf
     receivedBytesCount = recv(sock, buf, sizeof(buf), 0);
     if (receivedBytesCount > 0) {
-      // LOG_INF("Received %d bytes in socket.", receivedBytesCount);
+      // printf("Received %d bytes in socket.\n", receivedBytesCount);
       // Try to deserialize the incoming data
       AMCOM_Deserialize(&amcomReceiver, buf, receivedBytesCount);
     } else if (receivedBytesCount < 0) {
       // Negative result indicates that there was socket communication error
-      LOG_ERR("Socket recv failed with error: %d", WSAGetLastError());
+      printf("Socket recv failed with error: %d\n", WSAGetLastError());
       closesocket(sock);
       break;
     }
   } while (receivedBytesCount > 0);
 
-  LOG_INF("Closing connection.");
+  printf("Closing connection.\n");
 
   // shutdown the connection since we're done
   receivedBytesCount = shutdown(sock, SD_SEND);
@@ -150,13 +161,13 @@ int main(int argc, char **argv) {
   int result;
 
   // Say hello
-  LOG_INF("mniAM player listening on port %s\nPress CTRL+x to quit",
+  printf("mniAM player listening on port %s\nPress CTRL+x to quit",
           DEFAULT_TCP_PORT);
 
   // Initialize Winsock
   result = WSAStartup(MAKEWORD(2, 2), &wsaData);
   if (result != 0) {
-    LOG_ERR("WSAStartup failed with error: %d", result);
+    printf("WSAStartup failed with error: %d\n", result);
     return -1;
   }
 
@@ -170,7 +181,7 @@ int main(int argc, char **argv) {
   // Resolve the server address and port
   result = getaddrinfo(NULL, DEFAULT_TCP_PORT, &hints, &addrResult);
   if (result != 0) {
-    LOG_ERR("Function 'getaddrinfo' failed with error: %d", result);
+    printf("Function 'getaddrinfo' failed with error: %d\n", result);
     WSACleanup();
     return -2;
   }
@@ -179,7 +190,7 @@ int main(int argc, char **argv) {
   listenSocket = socket(addrResult->ai_family, addrResult->ai_socktype,
                         addrResult->ai_protocol);
   if (listenSocket == INVALID_SOCKET) {
-    LOG_ERR("Function 'socket' failed with error: %ld", WSAGetLastError());
+    printf("Function 'socket' failed with error: %ld\n", WSAGetLastError());
     freeaddrinfo(addrResult);
     WSACleanup();
     return -3;
@@ -187,7 +198,7 @@ int main(int argc, char **argv) {
   // Setup the TCP listening socket
   result = bind(listenSocket, addrResult->ai_addr, (int)addrResult->ai_addrlen);
   if (result == SOCKET_ERROR) {
-    LOG_ERR("Function 'bind' failed with error: %d", WSAGetLastError());
+    printf("Function 'bind' failed with error: %d\n", WSAGetLastError());
     freeaddrinfo(addrResult);
     closesocket(listenSocket);
     WSACleanup();
@@ -198,7 +209,7 @@ int main(int argc, char **argv) {
   // Listen for connections
   result = listen(listenSocket, SOMAXCONN);
   if (result == SOCKET_ERROR) {
-    LOG_ERR("Function 'listen' failed with error: %d", WSAGetLastError());
+    printf("Function 'listen' failed with error: %d\n", WSAGetLastError());
     closesocket(listenSocket);
     WSACleanup();
     return -5;
@@ -208,7 +219,7 @@ int main(int argc, char **argv) {
     // Accept client socket
     clientSocket = accept(listenSocket, NULL, NULL);
     if (clientSocket == INVALID_SOCKET) {
-      LOG_ERR("Function 'accept' failed with error: %d", WSAGetLastError());
+      printf("Function 'accept' failed with error: %d\n", WSAGetLastError());
       closesocket(listenSocket);
       WSACleanup();
       return -6;
