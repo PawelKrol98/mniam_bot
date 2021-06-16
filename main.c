@@ -57,6 +57,7 @@ void amcomPacketHandler(const AMCOM_Packet *packet, void *userContext) {
     //printfF("height: %f\n", newGameRequest.mapHeight);
     newGameUpdate(gameInfo, &newGameRequest);
     bytesToSend = AMCOM_Serialize(AMCOM_NEW_GAME_RESPONSE, NULL, 0, amcomBuf);
+    gameInfoInit(gameInfo);
     break;
   }
   case AMCOM_PLAYER_UPDATE_REQUEST:
