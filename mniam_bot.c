@@ -22,6 +22,18 @@ float calculateDistance(Position pointA, Position pointB)
     return sqrt(square);
 }
 
+void gameInfoInit(GameInfo* gameInfo)
+{
+    for (int i = 0; i < AMCOM_MAX_FOOD_UPDATES; i++)
+    {
+        gameInfo->food[i].state = false;
+    }
+    for (int i = 0; i < AMCOM_MAX_PLAYER_UPDATES; i++)
+    {
+        gameInfo->players[i].hp = 0;
+    }
+}
+
 void newGameUpdate(GameInfo* gameInfo, AMCOM_NewGameRequestPayload* newGameRequest)
 {
     gameInfo->alivePlayers = newGameRequest->numberOfPlayers;
@@ -35,10 +47,12 @@ void playerUpdate(GameInfo* gameInfo, AMCOM_PlayerUpdateRequestPayload* playerUp
     uint8_t playersInPacket = packetLength / 11;
     for (int i = 0; i < playersInPacket; i++)
     {
+        Position newPosition = {playerUpdateRequest->playerState[i].x, playerUpdateRequest->playerState[i].y};
         uint8_t playerId = playerUpdateRequest->playerState[i].playerNo;
         gameInfo->players[playerId].id = playerUpdateRequest->playerState[i].playerNo;
         gameInfo->players[playerId].hp = playerUpdateRequest->playerState[i].hp;
         gameInfo->players[playerId].radius = fminf(200, (25 + gameInfo->players[i].hp)/2);
+        gameInfo->players[playerId].direction = findAngleToGo(gameInfo->players[playerId].position, newPosition);
         if (gameInfo->players[playerId].hp != 0)
         {
             gameInfo->players[playerId].position.x = playerUpdateRequest->playerState[i].x;
@@ -77,7 +91,7 @@ void foodUpdate(GameInfo* gameInfo, AMCOM_FoodUpdateRequestPayload* foodUpdateRe
         if (gameInfo->food[i].state) foodLeft++;
     }
     gameInfo->foodLeft = foodLeft;
-    //printf("Food left: %d\n", gameInfo->foodLeft);
+    printf("Food left: %d\n", gameInfo->foodLeft);
 }
 
 void ourPositionUpdate(GameInfo* gameInfo, AMCOM_MoveRequestPayload* moveRequest)
@@ -112,7 +126,7 @@ uint8_t findClosestWorsePlayer(const GameInfo* gameInfo) {
     
     Position closestEnemy;
     PlayerInfo player = gameInfo->players[gameInfo->ourId];  
-    uint8_t closestEnemyId;
+    uint8_t closestEnemyId =INVALID_PLAYER_ID;
     float closestDistance = sqrt(pow(gameInfo->mapHeight, 2) + pow(gameInfo->mapWidth, 2));
     
     for (int i = 0; i < AMCOM_MAX_PLAYER_UPDATES; i++)
@@ -152,28 +166,65 @@ uint8_t findClosestPowerfulPlayer(const GameInfo* gameInfo) {
     return closestEnemyId;
 }
 
-uint8_t findClosestPlayerToFood(const GameInfo* gameInfo, uint16_t foodId) {
+Position findClosestFoodToPlayer(const GameInfo* gameInfo, uint8_t playerId) {
     
-    Position closestPlayerToFood;
-    uint8_t closestPlayerId;
+    Position closestFoodToPlayer;
     float closestDistance = sqrt(pow(gameInfo->mapHeight, 2) + pow(gameInfo->mapWidth, 2));
     
-    for (int i = 0; i < AMCOM_MAX_PLAYER_UPDATES; i++)
+    for (int i = 0; i < AMCOM_MAX_FOOD_UPDATES; i++)
     {
         if(gameInfo->players[i].hp > 0 && gameInfo->players[i].id != gameInfo->ourId) {
-            if (calculateDistance(gameInfo->food[foodId].position, gameInfo->players[i].position) < closestDistance)
+            if (calculateDistance(gameInfo->food[i].position, gameInfo->players[playerId].position) < closestDistance)
             {
-                closestDistance = calculateDistance(gameInfo->food[foodId].position, gameInfo->players[i].position);
-                closestPlayerToFood = gameInfo->players[i].position;
-                closestPlayerId = gameInfo->players[i].id;
+                closestDistance = calculateDistance(gameInfo->food[i].position, gameInfo->players[playerId].position);
+                closestFoodToPlayer = gameInfo->food[i].position;
             }
         }
     }
-    return closestPlayerId;
+    return closestFoodToPlayer;
+}
+
+bool killInsteadEat(const GameInfo* gameInfo, const uint8_t playerId, const uint16_t foodId)
+{
+    if (playerId != INVALID_PLAYER_ID)
+    {
+        if (gameInfo->players[playerId].hp < gameInfo->players[gameInfo->ourId].hp - 1 &&
+            calculateDistance(gameInfo->players[playerId].position, gameInfo->ourPosition) < 2 * calculateDistance(gameInfo->food[foodId].position, gameInfo->ourPosition))  
+            {
+                return true;
+            } 
+        return false;
+    }
+    return false;
+}
+
+Boolpos stealInsteadEat(const GameInfo* gameInfo)
+{
+    float ourDistance;
+    float themDistance;
+    Boolpos boolpos = {false, 0};
+    for (volatile int i = 0; i < AMCOM_MAX_PLAYER_UPDATES; i++)
+    {
+        if (gameInfo->players[i].hp == 0) continue;
+        Position closestFood = findClosestFoodToPlayer(gameInfo, gameInfo->players[i].id);
+        ourDistance = calculateDistance(gameInfo->ourPosition, closestFood);
+        if (gameInfo->players[i].hp != 0 && gameInfo->players[i].hp <= gameInfo->players[gameInfo->ourId].hp)
+        {
+            themDistance = calculateDistance(gameInfo->players[i].position, closestFood);
+            if (ourDistance < themDistance)
+            {
+                boolpos.boo = true;
+                boolpos.pos = closestFood;
+                return boolpos;
+            }
+        }
+    }
+    return boolpos;
 }
 
 float makeDecision(const GameInfo* gameInfo)
 {
+
     uint16_t closestFoodToEat; 
     uint8_t closestPlayerToEat;
     float distanceToFood;
@@ -181,26 +232,65 @@ float makeDecision(const GameInfo* gameInfo)
 
     if (gameInfo->foodLeft > 0 && gameInfo->alivePlayers > 1) 
     { 
+
         closestFoodToEat = findClosestFood(gameInfo);
         closestPlayerToEat = findClosestWorsePlayer(gameInfo); 
         distanceToFood = calculateDistance(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
-        distanceToPlayer = calculateDistance(gameInfo->ourPosition, gameInfo->players[closestPlayerToEat].position); 
+        if (closestPlayerToEat != INVALID_PLAYER_ID)
+        { 
+            distanceToPlayer = calculateDistance(gameInfo->ourPosition, gameInfo->players[closestPlayerToEat].position); 
+        }
+        else
+        {
+            distanceToPlayer = sqrt(pow(gameInfo->mapHeight, 2) + pow(gameInfo->mapWidth, 2));            
+        } 
+
         if (distanceToFood <= distanceToPlayer)
         {
-            return findAngleToGo(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
-        } else if (distanceToFood > distanceToPlayer)
+
+            bool kill = killInsteadEat(gameInfo, closestPlayerToEat, closestFoodToEat);
+            //Boolpos steal = stealInsteadEat(gameInfo);
+            if (kill) 
+            {
+                return findAngleToGo(gameInfo->ourPosition, gameInfo->players[closestPlayerToEat].position);
+            } 
+            /*
+            else if (steal.boo)
+            {
+                return findAngleToGo(gameInfo->ourPosition, steal.pos);
+            }
+            */
+            else  
+            {
+                return findAngleToGo(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
+            }
+        } 
+        else if (distanceToFood > distanceToPlayer)
         {
             return findAngleToGo(gameInfo->ourPosition, gameInfo->players[closestPlayerToEat].position);
         }
+
     }
     else if (gameInfo->foodLeft > 0)
     {
+
         closestFoodToEat = findClosestFood(gameInfo);
         distanceToFood = calculateDistance(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
         return findAngleToGo(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
+    
+    }
+    else if (gameInfo->alivePlayers > 1)
+    {
+        closestPlayerToEat = findClosestWorsePlayer(gameInfo);
+        if (closestPlayerToEat == INVALID_PLAYER_ID)
+        {
+            return 0;
+        }
+        return findAngleToGo(gameInfo->ourPosition, gameInfo->players[closestPlayerToEat].position);
     }
     else
     {
+        //printf("no food, no players");
         return 0;
     }
 
