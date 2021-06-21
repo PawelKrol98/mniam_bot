@@ -173,7 +173,8 @@ Position findClosestFoodToPlayer(const GameInfo* gameInfo, uint8_t playerId) {
     
     for (int i = 0; i < AMCOM_MAX_FOOD_UPDATES; i++)
     {
-        if(gameInfo->players[i].hp > 0 && gameInfo->players[i].id != gameInfo->ourId) {
+        if(gameInfo->players[i].hp > 0 && gameInfo->players[i].id != gameInfo->ourId && gameInfo->food[i].state)
+        {
             if (calculateDistance(gameInfo->food[i].position, gameInfo->players[playerId].position) < closestDistance)
             {
                 closestDistance = calculateDistance(gameInfo->food[i].position, gameInfo->players[playerId].position);
@@ -186,6 +187,13 @@ Position findClosestFoodToPlayer(const GameInfo* gameInfo, uint8_t playerId) {
 
 bool killInsteadEat(const GameInfo* gameInfo, const uint8_t playerId, const uint16_t foodId)
 {
+    float alfaAngle = findAngleToGo(gameInfo->ourPosition, gameInfo->players[playerId].position);
+    float betaAngle = gameInfo->players[playerId].direction;
+    float angleDiff = betaAngle - alfaAngle;
+    if (angleDiff > PI/2 && angleDiff < 3/2 * PI)
+    {
+        return false;
+    }
     if (playerId != INVALID_PLAYER_ID)
     {
         if (gameInfo->players[playerId].hp < gameInfo->players[gameInfo->ourId].hp - 1 &&
@@ -198,28 +206,27 @@ bool killInsteadEat(const GameInfo* gameInfo, const uint8_t playerId, const uint
     return false;
 }
 
-Boolpos stealInsteadEat(const GameInfo* gameInfo)
+float calculateAngleToFood(const GameInfo* gameInfo, uint16_t foodId)
 {
-    float ourDistance;
-    float themDistance;
-    Boolpos boolpos = {false, 0};
-    for (volatile int i = 0; i < AMCOM_MAX_PLAYER_UPDATES; i++)
-    {
-        if (gameInfo->players[i].hp == 0) continue;
-        Position closestFood = findClosestFoodToPlayer(gameInfo, gameInfo->players[i].id);
-        ourDistance = calculateDistance(gameInfo->ourPosition, closestFood);
-        if (gameInfo->players[i].hp != 0 && gameInfo->players[i].hp <= gameInfo->players[gameInfo->ourId].hp)
+    Position points[10];
+    Position foodPos = gameInfo->food[foodId].position;
+    Position closestPos;
+    float closestDistance = sqrt(pow(gameInfo->mapHeight, 2) + pow(gameInfo->mapWidth, 2));
+    float distance;
+
+    for (volatile size_t i = 0; i < 10; i++) {
+        points[i].x = foodPos.x + cos(6*PI/10 * i) * 0.99*gameInfo->players[gameInfo->ourId].radius;
+        points[i].y = foodPos.y + sin(6*PI/10 * i) * 0.99*gameInfo->players[gameInfo->ourId].radius;
+        distance = calculateDistance(gameInfo->ourPosition, points[i]);
+        if (closestDistance > distance)
+
         {
-            themDistance = calculateDistance(gameInfo->players[i].position, closestFood);
-            if (ourDistance < themDistance)
-            {
-                boolpos.boo = true;
-                boolpos.pos = closestFood;
-                return boolpos;
-            }
+            closestDistance = distance;
+            closestPos = points[i];
         }
     }
-    return boolpos;
+
+    return findAngleToGo(gameInfo->ourPosition, closestPos);
 }
 
 float makeDecision(const GameInfo* gameInfo)
@@ -229,7 +236,6 @@ float makeDecision(const GameInfo* gameInfo)
     uint8_t closestPlayerToEat;
     float distanceToFood;
     float distanceToPlayer;
-
     if (gameInfo->foodLeft > 0 && gameInfo->alivePlayers > 1) 
     { 
 
@@ -249,20 +255,13 @@ float makeDecision(const GameInfo* gameInfo)
         {
 
             bool kill = killInsteadEat(gameInfo, closestPlayerToEat, closestFoodToEat);
-            //Boolpos steal = stealInsteadEat(gameInfo);
             if (kill) 
             {
                 return findAngleToGo(gameInfo->ourPosition, gameInfo->players[closestPlayerToEat].position);
-            } 
-            /*
-            else if (steal.boo)
-            {
-                return findAngleToGo(gameInfo->ourPosition, steal.pos);
             }
-            */
             else  
             {
-                return findAngleToGo(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
+                return calculateAngleToFood(gameInfo, closestFoodToEat);
             }
         } 
         else if (distanceToFood > distanceToPlayer)
@@ -275,8 +274,7 @@ float makeDecision(const GameInfo* gameInfo)
     {
 
         closestFoodToEat = findClosestFood(gameInfo);
-        distanceToFood = calculateDistance(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
-        return findAngleToGo(gameInfo->ourPosition, gameInfo->food[closestFoodToEat].position);
+        return calculateAngleToFood(gameInfo, closestFoodToEat);
     
     }
     else if (gameInfo->alivePlayers > 1)

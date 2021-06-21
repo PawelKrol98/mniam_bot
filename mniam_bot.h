@@ -40,11 +40,6 @@ typedef struct GameInfo
     uint8_t foodLeft;
 } GameInfo;
 
-typedef struct Boolpos
-{
-    bool boo;
-    Position pos;
-} Boolpos;
 
 float findAngleToGo(Position, Position);
 float calculateDistance(Position, Position);
@@ -54,7 +49,6 @@ void playerUpdate(GameInfo*, AMCOM_PlayerUpdateRequestPayload*, uint8_t);
 void foodUpdate(GameInfo*, AMCOM_FoodUpdateRequestPayload*, uint8_t);
 void ourPositionUpdate(GameInfo*, AMCOM_MoveRequestPayload*);
 bool killInsteadEat(const GameInfo*, const uint8_t, const uint16_t);
-Boolpos stealInsteadEat(const GameInfo*);
 uint16_t findClosestFood(const GameInfo*);
 uint8_t findClosestWorsePlayer(const GameInfo*);
 uint8_t findClosestPowerfulPlayer(const GameInfo*);
